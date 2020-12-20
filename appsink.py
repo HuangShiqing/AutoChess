@@ -75,59 +75,51 @@ class status:
                           "娜可露露","大乔","周瑜","花木兰","貂蝉","典韦","刘禅","小乔","李元芳",
                           "关羽","李信","伽罗","公孙离","墨子","沈梦溪","杨玉环","刘备","老夫子"]
     
-    def get_status(self, img_np):
-        img1_np = img_np[0:37,110:239,:]#h,w  摆放阶段
-        img = Image.fromarray(img1_np.astype('uint8'))
-        img = img.resize((img.size[0]*2,img.size[1]*2))
-        img1_np = np.array(img)
-        
+    def get_status(self, img_np):        
+        # 选子
         img2_np = img_np[150:184,165:276,:]#h,w  推荐阵容
         img = Image.fromarray(img2_np.astype('uint8'))
         img = img.resize((img.size[0]*2,img.size[1]*2))
-        img2_np = np.array(img)
+        img2_np = np.array(img)        
+        result2 = self.reader_ch.recognize(img2_np.astype('uint8'))
+        if result2[0][1] in ['推荐阵容'] and result2[0][-1] > 0.5:
+            self.period = "选子"
+
+            rect_left = [262,509,756,1003,1250]
+            rect_right = [509,756,1003,1250,1497]
+            rect_top = 119
+            rect_bottom = 368
+
+            temp = []
+            for i in range(5):
+                im1 = np.expand_dims(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:],axis=0)#hw
+                tmp1 = Image.fromarray(np.squeeze(im1))
+                tmp1 = self.transform(tmp1)
+                temp.append(tmp1)
+            im = torch.cat([tmp.unsqueeze(0) for tmp in temp],0)
+            im = im.to(self.device)
+            outputs = self.net(im)
+            predicted = nn.functional.softmax(outputs.data,1).max(1)
+            self.result = [self.name_list[index] for index in predicted.indices.cpu().numpy()]
+            self.confidence = predicted.values.cpu().numpy()
+            
+            #现有金钱
+            img3_np = img_np[750:800,1480:1530,:]#h,w  金钱
+            img = Image.fromarray(img3_np.astype('uint8'))
+            img = img.resize((img.size[0]*2,img.size[1]*2))
+            img3_np = np.array(img)
+            result3 = self.reader_en.recognize(img3_np.astype('uint8'))
+            if result3[0][-1] > 0.3:
+                self.money = result3[0][1]
+                if self.money == 'o' or self.money == '':
+                    self.money = '0'
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
         
-        img3_np = img_np[750:800,1480:1530,:]#h,w  金钱
-        img = Image.fromarray(img3_np.astype('uint8'))
-        img = img.resize((img.size[0]*2,img.size[1]*2))
-        img3_np = np.array(img)
-        
+        #选装备
         img4_np = img_np[30:70,700:810,:]#h,w  剩余时间
         img = Image.fromarray(img4_np.astype('uint8'))
         img = img.resize((img.size[0]*2,img.size[1]*2))
         img4_np = np.array(img)
-        
-        result1 = self.reader_ch.recognize(img1_np.astype('uint8'))
-        if result1[0][1] in ['战斗中','准备战斗','结算中','摆放阶段'] and result1[0][-1] > 0.5:
-            self.period = result1[0][1]
-        else:
-            result2 = self.reader_ch.recognize(img2_np.astype('uint8'))
-            if result2[0][1] in ['推荐阵容'] and result2[0][-1] > 0.5:
-                self.period = "选子"
-                
-                rect_left = [262,509,756,1003,1250]
-                rect_right = [509,756,1003,1250,1497]
-                rect_top = 119
-                rect_bottom = 368
-                
-                temp = []
-                for i in range(5):
-                    im1 = np.expand_dims(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:],axis=0)#hw
-                    tmp1 = Image.fromarray(np.squeeze(im1))
-                    tmp1 = self.transform(tmp1)
-                    temp.append(tmp1)
-                im = torch.cat([tmp.unsqueeze(0) for tmp in temp],0)
-                im = im.to(self.device)
-                outputs = self.net(im)
-                predicted = nn.functional.softmax(outputs.data,1).max(1)
-                self.result = [self.name_list[index] for index in predicted.indices.cpu().numpy()]
-                self.confidence = predicted.values.cpu().numpy()
-                
-                result3 = self.reader_en.recognize(img3_np.astype('uint8'))
-                if result3[0][-1] > 0.3:
-                    self.money = result3[0][1]
-            else:
-                self.period = "未知"
-        
         result4 = self.reader_ch.recognize(img4_np.astype('uint8'))
         if result4[0][1] in ['剩余时间'] and result4[0][-1] > 0.5:
             self.period = "选装备"
@@ -144,8 +136,106 @@ class status:
                 img_small_np = np.array(img)
                 r = self.reader_ch.recognize(img_small_np.astype('uint8'))
                 self.result.append(r[0][1])
-                self.confidence.append(r[0][-1])
+                self.confidence.append(r[0][-1])  
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+        
+        img1_np = img_np[0:37,110:239,:]#h,w  摆放阶段
+        img = Image.fromarray(img1_np.astype('uint8'))
+        img = img.resize((img.size[0]*2,img.size[1]*2))
+        img1_np = np.array(img)
+        result1 = self.reader_ch.recognize(img1_np.astype('uint8'))
+        if result1[0][1] in ['战斗中','准备战斗','结算中','摆放阶段'] and result1[0][-1] > 0.5:
+            self.period = result1[0][1]
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+        
+        #1.组队准备
+        img_small_np = img_np[650:700,900:1050,:]#h,w
+        img = Image.fromarray(img_small_np.astype('uint8'))
+        img = img.resize((img.size[0]*2,img.size[1]*2))
+        img_small_np = np.array(img)
+        result = self.reader_ch.recognize(img_small_np.astype('uint8'))
+        if result[0][1] in ['开始匹配'] and result[0][-1] > 0.5:
+            self.period = "开始匹配"
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            
+        #2.匹配成功
+        img_small_np = img_np[630:680,830:920,:]#h,w
+        img = Image.fromarray(img_small_np.astype('uint8'))
+        img = img.resize((img.size[0]*2,img.size[1]*2))
+        img_small_np = np.array(img)
+        result = self.reader_ch.recognize(img_small_np.astype('uint8'))
+        if result[0][1] in ['确认'] and result[0][-1] > 0.5:
+            self.period = "匹配成功"
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            
+        #11.失败
+        # img_small_np = img_np[650:700,960:1070,:]#h,w
+        img_small_np = img_np[650:690,700:780,:]#h,w
+        # img_small_np = img_np[330:380,820:940,:]#h,w
+        img = Image.fromarray(img_small_np.astype('uint8'))
+        img = img.resize((img.size[0]*2,img.size[1]*2))
+        img_small_np = np.array(img)
+        result = self.reader_ch.recognize(img_small_np.astype('uint8'))
+        if result[0][1] in ['退出'] and result[0][-1] > 0.5:
+            self.period = "战斗失败"
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+        
+        #12.统计信息/经验更新
+        img_small_np = img_np[720:780,830:930,:]#h,w
+        img = Image.fromarray(img_small_np.astype('uint8'))
+        img = img.resize((img.size[0]*2,img.size[1]*2))
+        img_small_np = np.array(img)
+        result = self.reader_ch.recognize(img_small_np.astype('uint8'))
+        if result[0][1] in ['继续'] and result[0][-1] > 0.5:
+            self.period = "统计信息/经验更新"
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+        
+        #13.段位更新
+        img_small_np = img_np[560:610,970:1060,:]#h,w
+        img = Image.fromarray(img_small_np.astype('uint8'))
+        img = img.resize((img.size[0]*2,img.size[1]*2))
+        img_small_np = np.array(img)
+        result = self.reader_ch.recognize(img_small_np.astype('uint8'))
+        if result[0][1] in ['继续'] and result[0][-1] > 0.5:
+            self.period = "段位更新"
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+        
+        #14.经验更新，同统计信息
+#         img_small_np = img_np[720:780,830:930,:]#h,w
+#         img = Image.fromarray(img_small_np.astype('uint8'))
+#         img = img.resize((img.size[0]*2,img.size[1]*2))
+#         img_small_np = np.array(img)
+#         result = self.reader_ch.recognize(img_small_np.astype('uint8'))
+#         if result[0][1] in ['继续'] and result[0][-1] > 0.5:
+#             self.period = "经验更新"
+#             return
+        
+        #15.阵容回顾
+        img_small_np = img_np[740:780,920:1050,:]#h,w
+        # img_small_np = img_np[740:780,700:850,:]#h,w
+        img = Image.fromarray(img_small_np.astype('uint8'))
+        img = img.resize((img.size[0]*2,img.size[1]*2))
+        img_small_np = np.array(img)
+        result = self.reader_ch.recognize(img_small_np.astype('uint8'))
+        if result[0][1] in ['返回房间'] and result[0][-1] > 0.5:
+            self.period = "阵容回顾"
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+        
+        #16.名列前茅
+        img_small_np = img_np[700:770,770:1000,:]#h,w
+        img = Image.fromarray(img_small_np.astype('uint8'))
+        img = img.resize((img.size[0]*2,img.size[1]*2))
+        img_small_np = np.array(img)
+        result = self.reader_ch.recognize(img_small_np.astype('uint8'))
+        if result[0][1] in ['点击屏幕继续'] and result[0][-1] > 0.5:
+            self.period = "名列前茅"
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+        
+        self.period = "未知"   
         return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+
+        
+
 
 
 gimg = np.zeros((HEIGHT,WIDTH,3),dtype='uint8')
@@ -321,7 +411,8 @@ def gst_init():
     #pipeline = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width=640,height=480,framerate=30/1 ! videoconvert ! x264enc ! h264parse ! flvmux ! filesink location=appsrc.flv")
     #pipeline = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width=640,height=480,framerate=30/1 ! videoconvert ! appsink")
     #pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width=1920,height=1080,framerate=30/1 ! videoconvert ! x264enc ! h264parse ! flvmux ! rtmpsink location='rtmp://live-push.bilivideo.com/live-bvc/?streamname=live_276236640_89465078&key=ebee02ef9f8800960276c861ce05dacb&schedule=rtmp'")
-    pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! autovideosink".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
+#     pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! autovideosink".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
+    pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! x264enc ! h264parse ! flvmux ! rtmpsink location='rtmp://live-push.bilivideo.com/live-bvc/?streamname=live_276236640_89465078&key=ebee02ef9f8800960276c861ce05dacb&schedule=rtmp'".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
 
     appsink = pipeline.get_by_name("appsink0")
     appsink.connect("new-sample",cb_appsink)
@@ -369,6 +460,27 @@ def action_init():
 
                 button2[0] = 1
                 button2_location = (1500, 730)
+            elif g_result['period'] in ['开始匹配']:
+                button2_location = (975,675)#w,h
+                button2[0] = 1
+            elif g_result['period'] in ['匹配成功']:
+                button2_location = (875,655)#w,h
+                button2[0] = 1   
+            elif g_result['period'] in ['战斗失败']:
+                button2_location = (740,670)#w,h
+                button2[0] = 1    
+            elif g_result['period'] in ['统计信息/经验更新']:
+                button2_location = (880,750)#w,h
+                button2[0] = 1
+            elif g_result['period'] in ['段位更新']:
+                button2_location = (985,585)#w,h
+                button2[0] = 1
+            elif g_result['period'] in ['阵容回顾']:
+                button2_location = (985,760)#w,h
+                button2[0] = 1
+            elif g_result['period'] in ['名列前茅']:
+                button2_location = (985,760)#w,h
+                button2[0] = 1
             lock2.release()
 
             for i in range(5):
