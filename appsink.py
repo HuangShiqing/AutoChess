@@ -3,6 +3,7 @@ gi.require_version('Gst','1.0')
 from gi.repository import Gst, GObject, GLib
 import numpy as np
 from PIL import Image,ImageDraw,ImageFont
+import time,os
 
 import torch
 import torchvision
@@ -54,6 +55,10 @@ status_rect_3_right = 1530
 status_rect_3_top = 750
 status_rect_3_bottom = 800
 
+log_time = time.strftime("%Y-%m-%d-%H-%M", time.localtime())
+count = 0
+count2 = 0
+
 class status:
     def __init__(self):
         self.period = "未知"
@@ -66,16 +71,17 @@ class status:
         self.transform = transforms.Compose([transforms.Resize(size=(224, 224)), 
                                              transforms.ToTensor()])
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.net = torch.load("./model_600.pkl").eval()
+        self.net = torch.load("./trained_model/model_latest.pkl").eval()
         self.name_list = ["猪八戒","牛魔","裴擒虎","鲁班","上官婉儿","甄姬","孙策","陈咬金","武则天",
                           "庄周","蔡文姬","马超","嫦娥","橘右京","孙悟空","凯","张飞","诸葛亮","空",
                           "孙尚香","蒙犽","元歌","黄忠","奕星","夏侯惇","狄仁杰","明世隐","曹操",
                           "宫本武藏","钟无艳","李白","司马懿","太乙真人","吕布","姜子牙","盾山",
-                          "百里守约","赵云","苏烈","孙膑","百里玄策","钟馗","后奕","不知火舞",
+                          "百里守约","赵云","苏烈","孙膑","百里玄策","钟馗","不知火舞",
                           "娜可露露","大乔","周瑜","花木兰","貂蝉","典韦","刘禅","小乔","李元芳",
-                          "关羽","李信","伽罗","公孙离","墨子","沈梦溪","杨玉环","刘备","老夫子"]
+                          "关羽","李信","伽罗","公孙离","墨子","沈梦溪","后奕","杨玉环","刘备","老夫子"]
     
-    def get_status(self, img_np):        
+    def get_status(self, img_np):
+        global count, count2, log_time
         # 选子
         img2_np = img_np[150:184,165:276,:]#h,w  推荐阵容
         img = Image.fromarray(img2_np.astype('uint8'))
@@ -102,7 +108,17 @@ class status:
             predicted = nn.functional.softmax(outputs.data,1).max(1)
             self.result = [self.name_list[index] for index in predicted.indices.cpu().numpy()]
             self.confidence = predicted.values.cpu().numpy()
-            
+
+            #记录置信度低的图像
+            dir = "./log/"+log_time+"/piece/"
+            for i in range(5):
+                if self.confidence[i] < 0.8:
+                    tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
+                    if not os.path.isdir(dir + self.result[i]):
+                        os.makedirs(dir + self.result[i])
+                    tmp1.save(dir+self.result[i]+"/"+str(count)+".jpg")
+                    count += 1
+
             #现有金钱
             img3_np = img_np[750:800,1480:1530,:]#h,w  金钱
             img = Image.fromarray(img3_np.astype('uint8'))
@@ -136,7 +152,29 @@ class status:
                 img_small_np = np.array(img)
                 r = self.reader_ch.recognize(img_small_np.astype('uint8'))
                 self.result.append(r[0][1])
-                self.confidence.append(r[0][-1])  
+                self.confidence.append(r[0][-1])
+
+                #记录置信度低的图像
+                rect_left = [262, 509, 756, 1003, 1250]
+                rect_right = [509, 756, 1003, 1250, 1497]
+                rect_top = 119
+                rect_bottom = 368
+                dir = "./log/"+log_time+"/weapon/"
+                for i in range(5):
+                    if self.confidence[i] < 0.8:
+                        tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
+                        if not os.path.isdir(dir+self.result[i]):
+                            os.makedirs(dir+self.result[i])
+                        tmp1.save(dir+self.result[i]+"/"+str(count2)+".jpg")
+                        count2 += 1
+
+                # dir = "./log/"+log_time+"/weapon/"
+                # global count2
+                # for i in range(5):
+                #     tmp1 = Image.fromarray(img_np[rect_top:rect_bottom, rect_left[i]:rect_right[i], :])
+                #     tmp1.save(dir + str(count2) + ".jpg")
+                #     count2 += 1
+
             return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
         
         img1_np = img_np[0:37,110:239,:]#h,w  摆放阶段
@@ -411,7 +449,7 @@ def gst_init():
     #pipeline = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width=640,height=480,framerate=30/1 ! videoconvert ! x264enc ! h264parse ! flvmux ! filesink location=appsrc.flv")
     #pipeline = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width=640,height=480,framerate=30/1 ! videoconvert ! appsink")
     #pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width=1920,height=1080,framerate=30/1 ! videoconvert ! x264enc ! h264parse ! flvmux ! rtmpsink location='rtmp://live-push.bilivideo.com/live-bvc/?streamname=live_276236640_89465078&key=ebee02ef9f8800960276c861ce05dacb&schedule=rtmp'")
-#     pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! autovideosink".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
+    # pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! autovideosink".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
     pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! x264enc ! h264parse ! flvmux ! rtmpsink location='rtmp://live-push.bilivideo.com/live-bvc/?streamname=live_276236640_89465078&key=ebee02ef9f8800960276c861ce05dacb&schedule=rtmp'".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
 
     appsink = pipeline.get_by_name("appsink0")
@@ -523,8 +561,7 @@ def detect_init():
         
     t = Thread(target=detect, name='detect')
     t.start()
-    
-import time
+
 if __name__ == "__main__":
     action_init()
     detect_init()
