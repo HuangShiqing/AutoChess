@@ -79,6 +79,13 @@ class status:
                           "百里守约","赵云","苏烈","孙膑","百里玄策","钟馗","不知火舞",
                           "娜可露露","大乔","周瑜","花木兰","貂蝉","典韦","刘禅","小乔","李元芳",
                           "关羽","李信","伽罗","公孙离","墨子","沈梦溪","后奕","杨玉环","刘备","老夫子"]
+        self.net2 = torch.load("./trained_weapon_model/model_600.pkl").eval()
+        self.name_weapon_list = ["红莲斗篷","辉月","虚无法杖","尧天令","名刀","坦克令旗","血魔之怒","制裁之刃",
+                                 "泣血之刃","吴国令","长城令","影刃", "贤者的庇护","刺客令旗","空","无尽战刃",
+                                 "碎星锤", "抵抗之靴","霸者重装","稷下令","极寒风暴","蜀国令","封神令","破晓",
+                                 "梦魇之牙","魔女斗篷","闪电匕首","贤者之书","辅助令旗","末世","战士令旗",
+                                 "反伤甲","冰霜长矛","法师令旗","炽热支配者","暴烈之甲","魏国令","长安令",
+                                 "噬神之书","博学者之怒","射手令旗","破军"]
     
     def get_status(self, img_np):
         global count, count2, log_time
@@ -141,39 +148,34 @@ class status:
             self.period = "选装备"
             self.result = []
             self.confidence = []
-            
-            rect_left = [330,560,790,1020,1250]
-            rect_right = [490,720,950,1180,1410]
+
+            rect_left = [262, 509, 756, 1003, 1250]
+            rect_right = [509, 756, 1003, 1250, 1497]
+            rect_top = 119
+            rect_bottom = 368
+
+            temp = []
             for i in range(5):
-                #装备选择 装备1
-                img_small_np = img_np[110:150,rect_left[i]:rect_right[i],:]#h,w
-                img = Image.fromarray(img_small_np.astype('uint8'))
-                img = img.resize((img.size[0]*2,img.size[1]*2))
-                img_small_np = np.array(img)
-                r = self.reader_ch.recognize(img_small_np.astype('uint8'))
-                self.result.append(r[0][1])
-                self.confidence.append(r[0][-1])
+                im1 = np.expand_dims(img_np[rect_top:rect_bottom, rect_left[i]:rect_right[i], :], axis=0)  # hw
+                tmp1 = Image.fromarray(np.squeeze(im1))
+                tmp1 = self.transform(tmp1)
+                temp.append(tmp1)
+            im = torch.cat([tmp.unsqueeze(0) for tmp in temp], 0)
+            im = im.to(self.device)
+            outputs = self.net2(im)
+            predicted = nn.functional.softmax(outputs.data, 1).max(1)
+            self.result = [self.name_weapon_list[index] for index in predicted.indices.cpu().numpy()]
+            self.confidence = predicted.values.cpu().numpy()
 
-                #记录置信度低的图像
-                rect_left = [262, 509, 756, 1003, 1250]
-                rect_right = [509, 756, 1003, 1250, 1497]
-                rect_top = 119
-                rect_bottom = 368
-                dir = "./log/"+log_time+"/weapon/"
-                for i in range(5):
-                    if self.confidence[i] < 0.8:
-                        tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
-                        if not os.path.isdir(dir+self.result[i]):
-                            os.makedirs(dir+self.result[i])
-                        tmp1.save(dir+self.result[i]+"/"+str(count2)+".jpg")
-                        count2 += 1
-
-                # dir = "./log/"+log_time+"/weapon/"
-                # global count2
-                # for i in range(5):
-                #     tmp1 = Image.fromarray(img_np[rect_top:rect_bottom, rect_left[i]:rect_right[i], :])
-                #     tmp1.save(dir + str(count2) + ".jpg")
-                #     count2 += 1
+            #记录置信度低的图像
+            dir = "./log/"+log_time+"/weapon/"
+            for i in range(5):
+                if self.confidence[i] < 0.8:
+                    tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
+                    if not os.path.isdir(dir+self.result[i]):
+                        os.makedirs(dir+self.result[i])
+                    tmp1.save(dir+self.result[i]+"/"+str(count2)+".jpg")
+                    count2 += 1
 
             return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
         
@@ -449,8 +451,8 @@ def gst_init():
     #pipeline = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width=640,height=480,framerate=30/1 ! videoconvert ! x264enc ! h264parse ! flvmux ! filesink location=appsrc.flv")
     #pipeline = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width=640,height=480,framerate=30/1 ! videoconvert ! appsink")
     #pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width=1920,height=1080,framerate=30/1 ! videoconvert ! x264enc ! h264parse ! flvmux ! rtmpsink location='rtmp://live-push.bilivideo.com/live-bvc/?streamname=live_276236640_89465078&key=ebee02ef9f8800960276c861ce05dacb&schedule=rtmp'")
-    # pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! autovideosink".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
-    pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! x264enc ! h264parse ! flvmux ! rtmpsink location='rtmp://live-push.bilivideo.com/live-bvc/?streamname=live_276236640_89465078&key=ebee02ef9f8800960276c861ce05dacb&schedule=rtmp'".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
+    pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! autovideosink".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
+    # pipeline2 = Gst.parse_launch("appsrc is-live=True do-timestamp=True emit-signals=True block=True stream-type=0 format=GST_FORMAT_TIME caps=video/x-raw,format=RGB,width={},height={},framerate=30/1 ! videoconvert ! videoscale ! x264enc ! h264parse ! flvmux ! rtmpsink location='rtmp://live-push.bilivideo.com/live-bvc/?streamname=live_276236640_89465078&key=ebee02ef9f8800960276c861ce05dacb&schedule=rtmp'".format(WIDTH,HEIGHT))    # video/x-raw,format=RGB,width=880,height=400,framerate=30/1 !
 
     appsink = pipeline.get_by_name("appsink0")
     appsink.connect("new-sample",cb_appsink)
