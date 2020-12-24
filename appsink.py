@@ -58,6 +58,7 @@ status_rect_3_bottom = 800
 log_time = time.strftime("%Y-%m-%d-%H-%M", time.localtime())
 count = 0
 count2 = 0
+count3 = 0
 
 class status:
     def __init__(self):
@@ -88,7 +89,7 @@ class status:
                                  "噬神之书","博学者之怒","射手令旗","破军"]
     
     def get_status(self, img_np):
-        global count, count2, log_time
+        global count, count2,count3, log_time
         # 选子
         img2_np = img_np[150:184,165:276,:]#h,w  推荐阵容
         img = Image.fromarray(img2_np.astype('uint8'))
@@ -117,14 +118,15 @@ class status:
             self.confidence = predicted.values.cpu().numpy()
 
             #记录置信度低的图像
-            dir = "./log/"+log_time+"/piece/"
-            for i in range(5):
-                if self.confidence[i] < 0.8:
-                    tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
-                    if not os.path.isdir(dir + self.result[i]):
-                        os.makedirs(dir + self.result[i])
-                    tmp1.save(dir+self.result[i]+"/"+str(count)+".jpg")
-                    count += 1
+            count += 1
+            if count % 5 == 0:
+                dir = "./log/"+log_time+"/piece/"
+                for i in range(5):
+                    if self.confidence[i] < 0.8:
+                        tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
+                        if not os.path.isdir(dir + self.result[i]):
+                            os.makedirs(dir + self.result[i])
+                        tmp1.save(dir+self.result[i]+"/"+str(count)+".jpg")
 
             #现有金钱
             img3_np = img_np[750:800,1480:1530,:]#h,w  金钱
@@ -168,15 +170,16 @@ class status:
             self.confidence = predicted.values.cpu().numpy()
 
             #记录置信度低的图像
-            dir = "./log/"+log_time+"/weapon/"
-            for i in range(5):
-                if self.confidence[i] < 0.8:
-                    tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
-                    if not os.path.isdir(dir+self.result[i]):
-                        os.makedirs(dir+self.result[i])
-                    tmp1.save(dir+self.result[i]+"/"+str(count2)+".jpg")
-                    count2 += 1
-
+            count2 += 1
+            if count2 % 5 == 0:
+                dir = "./log/"+log_time+"/weapon/"
+                for i in range(5):
+                    if self.confidence[i] < 0.8:
+                        tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
+                        if not os.path.isdir(dir+self.result[i]):
+                            os.makedirs(dir+self.result[i])
+                        tmp1.save(dir+self.result[i]+"/"+str(count2)+".jpg")
+                    
             return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
         
         img1_np = img_np[0:37,110:239,:]#h,w  摆放阶段
@@ -186,6 +189,18 @@ class status:
         result1 = self.reader_ch.recognize(img1_np.astype('uint8'))
         if result1[0][1] in ['战斗中','准备战斗','结算中','摆放阶段'] and result1[0][-1] > 0.5:
             self.period = result1[0][1]
+
+            if self.period in ['摆放阶段']:
+                count3 += 1
+                dir = "./log/"+log_time+"/candidate/"
+                if not os.path.isdir(dir):
+                    os.makedirs(dir)
+                if count3 % 25 == 0:
+                    # count3 = 0
+                    for i in range(5):
+                        img_small_np = img_np[650:814,350+i*125:475+i*125,:]#h,w
+                        img = Image.fromarray(img_small_np.astype('uint8'))
+                        img.save(dir+str(count3)+"_"+str(i)+".jpg")
             return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
         
         #1.组队准备

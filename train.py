@@ -34,58 +34,8 @@ class CactiDataset(Dataset):
         return image, label
 
 
-def test():
-    Gb_data_dir = "/home/hsq/DeepLearning/volume/gstreamer/process/img/"
-    csv = pd.read_csv(Gb_data_dir + "valid.csv")
-    transform = transforms.Compose(
-        [transforms.Resize(size=(224, 224)), transforms.ToTensor()])
-    testset = CactiDataset(csv, Gb_data_dir, transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=16,
-                                             shuffle=True, num_workers=2)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-    net = torch.load("./trained_model/model_latest.pkl")
-    net.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for data in testloader:
-            inputs, labels = data
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = net(inputs)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-    print('Accuracy of the network on the %d test images: %d %%' % (
-        len(testset), 100 * correct / total))
-    exit()
-
-
-def test_one(img_path):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-    image = Image.open(img_path)
-    image = image.convert('RGB')
-    transform = transforms.Compose(
-        [transforms.Resize(size=(224, 224)), transforms.ToTensor()])
-    image = transform(image).unsqueeze(0)
-    image = image.to(device)
-    net = torch.load("./model_600.pkl")
-    net.eval()
-
-    outputs = net(image)
-    predicted = nn.functional.softmax(outputs,1).max(1)
-    print("output tensor: ",predicted)
-    exit()
-
-
-
 if __name__ == '__main__':
-    # test_one("/workspace/volume/gstreamer/process/classification/2.jpg")
-    # test()
-
-    Gb_data_dir = "/home/hsq/DeepLearning/volume/gstreamer/process/img/"
+    Gb_data_dir = "/home/hsq/DeepLearning/volume/gstreamer/process/AutoChess/log/weapon/"
     csv = pd.read_csv(Gb_data_dir + "train.csv")
     transform = transforms.Compose(
         [transforms.Resize(size=(224, 224)), transforms.ToTensor()])#transforms.RandomCrop((300,300))
@@ -125,8 +75,8 @@ if __name__ == '__main__':
                   (epoch + 1, i + 1, running_loss / 2000))
             running_loss = 0.0
         if epoch % 100 == 0:
-            torch.save(net, './trained_model/model_{}.pkl'.format(epoch))
-    torch.save(net, './trained_model/model_latest.pkl')
+            torch.save(net, './trained_weapon_model/model_{}.pkl'.format(epoch))
+    torch.save(net, './trained_weapon_model/model_latest.pkl')
     print('Finished Training')
 
     exit()
