@@ -66,27 +66,30 @@ class status:
         self.money = 0
         self.result = []
         self.confidence = []
+        self.result_candidate = []
+        self.confidence_candidate = []
         self.reader_en = easyocr.Reader(['en'])
         self.reader_ch = easyocr.Reader(['ch_sim'])
         
         self.transform = transforms.Compose([transforms.Resize(size=(224, 224)), 
                                              transforms.ToTensor()])
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.net = torch.load("./trained_model/model_latest.pkl").eval()
+        self.net = torch.load("./trained_model_hero/0/model_latest.pkl").eval()
         self.name_list = ["猪八戒","牛魔","裴擒虎","鲁班","上官婉儿","甄姬","孙策","陈咬金","武则天",
                           "庄周","蔡文姬","马超","嫦娥","橘右京","孙悟空","凯","张飞","诸葛亮","空",
                           "孙尚香","蒙犽","元歌","黄忠","奕星","夏侯惇","狄仁杰","明世隐","曹操",
                           "宫本武藏","钟无艳","李白","司马懿","太乙真人","吕布","姜子牙","盾山",
                           "百里守约","赵云","苏烈","孙膑","百里玄策","钟馗","不知火舞",
                           "娜可露露","大乔","周瑜","花木兰","貂蝉","典韦","刘禅","小乔","李元芳",
-                          "关羽","李信","伽罗","公孙离","墨子","沈梦溪","后奕","杨玉环","刘备","老夫子"]
-        self.net2 = torch.load("./trained_weapon_model/model_600.pkl").eval()
-        self.name_weapon_list = ["红莲斗篷","辉月","虚无法杖","尧天令","名刀","坦克令旗","血魔之怒","制裁之刃",
+                          "关羽","李信","伽罗","公孙离","墨子","沈梦溪","后裔","杨玉环","刘备","老夫子"]
+        self.net2 = torch.load("./trained_model_weapon/0/model_latest.pkl").eval()
+        self.name_weapon_list = ["红莲斗篷","辉月","虚无法杖","尧天令","名刀","坦克令旗","不详征兆","血魔之怒","制裁之刃",
                                  "泣血之刃","吴国令","长城令","影刃", "贤者的庇护","刺客令旗","空","无尽战刃",
                                  "碎星锤", "抵抗之靴","霸者重装","稷下令","极寒风暴","蜀国令","封神令","破晓",
                                  "梦魇之牙","魔女斗篷","闪电匕首","贤者之书","辅助令旗","末世","战士令旗",
                                  "反伤甲","冰霜长矛","法师令旗","炽热支配者","暴烈之甲","魏国令","长安令",
                                  "噬神之书","博学者之怒","射手令旗","破军"]
+        self.net3 = torch.load("./trained_model_candidate/1/model_latest.pkl").eval()
     
     def get_status(self, img_np):
         global count, count2,count3, log_time
@@ -120,13 +123,43 @@ class status:
             #记录置信度低的图像
             count += 1
             if count % 5 == 0:
-                dir = "./log/"+log_time+"/piece/"
+                dir = "./log/"+log_time+"/hero/"
                 for i in range(5):
                     if self.confidence[i] < 0.8:
                         tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
                         if not os.path.isdir(dir + self.result[i]):
                             os.makedirs(dir + self.result[i])
                         tmp1.save(dir+self.result[i]+"/"+str(count)+".jpg")
+
+            #检测候选区
+            rect_left = [350,475,600,725,850,975,1100,1225]
+            rect_right = [475,600,725,850,975,1100,1225,1450]
+            rect_top = 650
+            rect_bottom = 814
+
+            temp = []
+            for i in range(8):
+                im1 = np.expand_dims(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:],axis=0)#hw
+                tmp1 = Image.fromarray(np.squeeze(im1))
+                tmp1 = self.transform(tmp1)
+                temp.append(tmp1)
+            im = torch.cat([tmp.unsqueeze(0) for tmp in temp],0)
+            im = im.to(self.device)
+            outputs = self.net3(im)
+            predicted = nn.functional.softmax(outputs.data,1).max(1)
+            self.result_candidate = [self.name_list[index] for index in predicted.indices.cpu().numpy()]
+            self.confidence_candidate = predicted.values.cpu().numpy()
+
+            #记录candidate置信度低的图像
+            count3 += 1
+            if count3 % 5 == 0:
+                dir = "./log/"+log_time+"/candidate/"
+                for i in range(8):
+                    if self.confidence_candidate[i] < 0.8:
+                        tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
+                        if not os.path.isdir(dir + self.result_candidate[i]):
+                            os.makedirs(dir + self.result_candidate[i])
+                        tmp1.save(dir+self.result_candidate[i]+"/"+str(count3)+".jpg")
 
             #现有金钱
             img3_np = img_np[750:800,1480:1530,:]#h,w  金钱
@@ -138,7 +171,7 @@ class status:
                 self.money = result3[0][1]
                 if self.money == 'o' or self.money == '':
                     self.money = '0'
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
         
         #选装备
         img4_np = img_np[30:70,700:810,:]#h,w  剩余时间
@@ -180,8 +213,7 @@ class status:
                             os.makedirs(dir+self.result[i])
                         tmp1.save(dir+self.result[i]+"/"+str(count2)+".jpg")
                     
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
-        
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}        
         img1_np = img_np[0:37,110:239,:]#h,w  摆放阶段
         img = Image.fromarray(img1_np.astype('uint8'))
         img = img.resize((img.size[0]*2,img.size[1]*2))
@@ -189,19 +221,7 @@ class status:
         result1 = self.reader_ch.recognize(img1_np.astype('uint8'))
         if result1[0][1] in ['战斗中','准备战斗','结算中','摆放阶段'] and result1[0][-1] > 0.5:
             self.period = result1[0][1]
-
-            if self.period in ['摆放阶段']:
-                count3 += 1
-                dir = "./log/"+log_time+"/candidate/"
-                if not os.path.isdir(dir):
-                    os.makedirs(dir)
-                if count3 % 25 == 0:
-                    # count3 = 0
-                    for i in range(5):
-                        img_small_np = img_np[650:814,350+i*125:475+i*125,:]#h,w
-                        img = Image.fromarray(img_small_np.astype('uint8'))
-                        img.save(dir+str(count3)+"_"+str(i)+".jpg")
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
         
         #1.组队准备
         img_small_np = img_np[650:700,900:1050,:]#h,w
@@ -211,7 +231,7 @@ class status:
         result = self.reader_ch.recognize(img_small_np.astype('uint8'))
         if result[0][1] in ['开始匹配'] and result[0][-1] > 0.5:
             self.period = "开始匹配"
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
             
         #2.匹配成功
         img_small_np = img_np[630:680,830:920,:]#h,w
@@ -221,7 +241,7 @@ class status:
         result = self.reader_ch.recognize(img_small_np.astype('uint8'))
         if result[0][1] in ['确认'] and result[0][-1] > 0.5:
             self.period = "匹配成功"
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
             
         #11.失败
         # img_small_np = img_np[650:700,960:1070,:]#h,w
@@ -233,7 +253,7 @@ class status:
         result = self.reader_ch.recognize(img_small_np.astype('uint8'))
         if result[0][1] in ['退出'] and result[0][-1] > 0.5:
             self.period = "战斗失败"
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
         
         #12.统计信息/经验更新
         img_small_np = img_np[720:780,830:930,:]#h,w
@@ -243,7 +263,7 @@ class status:
         result = self.reader_ch.recognize(img_small_np.astype('uint8'))
         if result[0][1] in ['继续'] and result[0][-1] > 0.5:
             self.period = "统计信息/经验更新"
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
         
         #13.段位更新
         img_small_np = img_np[560:610,970:1060,:]#h,w
@@ -253,7 +273,7 @@ class status:
         result = self.reader_ch.recognize(img_small_np.astype('uint8'))
         if result[0][1] in ['继续'] and result[0][-1] > 0.5:
             self.period = "段位更新"
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
         
         #14.经验更新，同统计信息
 #         img_small_np = img_np[720:780,830:930,:]#h,w
@@ -274,7 +294,7 @@ class status:
         result = self.reader_ch.recognize(img_small_np.astype('uint8'))
         if result[0][1] in ['返回房间'] and result[0][-1] > 0.5:
             self.period = "阵容回顾"
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
         
         #16.名列前茅
         img_small_np = img_np[700:770,770:1000,:]#h,w
@@ -284,10 +304,10 @@ class status:
         result = self.reader_ch.recognize(img_small_np.astype('uint8'))
         if result[0][1] in ['点击屏幕继续'] and result[0][-1] > 0.5:
             self.period = "名列前茅"
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
         
         self.period = "未知"   
-        return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence}
+        return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
 
         
 
@@ -295,13 +315,13 @@ class status:
 
 gimg = np.zeros((HEIGHT,WIDTH,3),dtype='uint8')
 gshow = np.zeros((HEIGHT,WIDTH,3),dtype='uint8')
-g_result = {"period":"未知","money":0,"class":["","","","",""],"confidence":["","","","",""]}
+g_result = {"period":"未知","money":0,"class":["","","","",""],"confidence":["","","","",""],"class_candidate":["","","","","","","",""],"confidence_candidate":["","","","","","","",""]}
 lock = Lock()
 lock2 = Lock()
 event = Event()
 
 
-name_list = ["猪八戒","牛魔","裴擒虎","鲁班","上官婉儿","甄姬","孙策","陈咬金","武则天","庄周","蔡文姬","马超","嫦娥","橘右京","孙悟空","凯","张飞","诸葛亮","空","孙尚香","蒙犽","元歌","黄忠","奕星","夏侯惇","狄仁杰","明世隐","曹操","宫本武藏","钟无艳","李白","司马懿","太乙真人","吕布","姜子牙","盾山","百里守约","赵云","苏烈","孙膑","百里玄策","钟馗","后奕","不知火舞","娜可露露","大乔","周瑜","花木兰","貂蝉","典韦","刘禅","小乔","李元芳","关羽","李信","伽罗","公孙离","墨子","沈梦溪","杨玉环","刘备","老夫子"]
+name_list = ["猪八戒","牛魔","裴擒虎","鲁班","上官婉儿","甄姬","孙策","陈咬金","武则天","庄周","蔡文姬","马超","嫦娥","橘右京","孙悟空","凯","张飞","诸葛亮","空","孙尚香","蒙犽","元歌","黄忠","奕星","夏侯惇","狄仁杰","明世隐","曹操","宫本武藏","钟无艳","李白","司马懿","太乙真人","吕布","姜子牙","盾山","百里守约","赵云","苏烈","孙膑","百里玄策","钟馗","后裔","不知火舞","娜可露露","大乔","周瑜","花木兰","貂蝉","典韦","刘禅","小乔","李元芳","关羽","李信","伽罗","公孙离","墨子","沈梦溪","杨玉环","刘备","老夫子"]
 
 
 def cb_busmessage_state_change(bus,message,pipeline):
@@ -314,6 +334,11 @@ def cb_busmessage_state_change(bus,message,pipeline):
 from fractions import Fraction
 pts = 0
 duration = 10**9 / Fraction(30)
+def draw_rect(draw, left,top,right,bottom,color,size):
+    draw.line((left, top, left, bottom), color,size)#w1,h1,w2,h2
+    draw.line((right,top, right, bottom), color,size)#w1,h1,w2,h2
+    draw.line((left, top, right, top), color,size)#w1,h1,w2,h2
+    draw.line((left, bottom, right, bottom), color,size)#w1,h1,w2,h2
 def cb_appsrc(appsrc, b):#显示
     #print("hi form cb_appsrc")
     global name_list
@@ -344,6 +369,8 @@ def cb_appsrc(appsrc, b):#显示
         draw.text((1113,550),str(round(result['confidence'][3],3)),font=fnt, fill=(255,0,0))#w,h
         draw.text((1380,550),str(round(result['confidence'][4],3)),font=fnt, fill=(255,0,0))#w,h
 
+        rect_top = 119
+        rect_bottom = 368
         #棋子框横线
         draw.line((rect1_left, rect_top, rect5_right, rect_top), 'red',5)#w1,h1,w2,h2
         draw.line((rect1_left, rect_bottom, rect5_right, rect_bottom), 'red',5)#w1,h1,w2,h2
@@ -404,7 +431,17 @@ def cb_appsrc(appsrc, b):#显示
         draw.line((status_rect_3_left, status_rect_3_top, status_rect_3_right, status_rect_3_top), 'red',5)#w1,h1,w2,h2
         draw.line((status_rect_3_left, status_rect_3_bottom, status_rect_3_right, status_rect_3_bottom), 'red',5)#w1,h1,w2,h2
         draw.text((status_rect_3_right+20,int((status_rect_3_top+status_rect_3_bottom)/2)),str(result['money']),font=fnt, fill=(255,0,0))#w,h
-        
+
+        #候选区
+        rect_left = [350,475,600,725,850,975,1100,1225]
+        rect_right = [475,600,725,850,975,1100,1225,1350]
+        rect_top = 650
+        rect_bottom = 814
+        for i in range(8):
+            draw_rect(draw, rect_left[i],rect_top,rect_right[i],rect_bottom,'red',5)
+            draw.text((rect_left[i],rect_top-40),str(result['class_candidate'][i]),font=fnt, fill=(255,0,0))#w,h
+            # draw.text((rect_left[i],rect_top-20),str(result['confidence_candidate'][i]),font=fnt, fill=(255,0,0))#w,h
+
     draw.text((1500,600),"status:"+result['period'],font=fnt, fill=(255,0,0))
     draw.text((1500,650),"money:"+str(result['money']),font=fnt, fill=(255,0,0))
     array = np.asarray(im)
@@ -486,10 +523,35 @@ def gst_init():
 def action_init():
     def is_target(result):
         target_name_list = ["马超","张飞","诸葛亮","元歌","黄忠","赵云","刘禅","关羽","刘备"]
-        if result in target_name_list:
-            return True
-        else:
-            return False
+        # target_name_list = ["元歌","裴擒虎","百里玄策","橘右京","孙悟空","李白","马超","娜可露露","上官婉儿","貂蝉"]
+        # target_name_list = ["曹操","典韦","老夫子","钟无艳","花木兰","李信","凯","宫本武藏","吕布","夏侯惇","孙策"]
+        # target_name_list = ["甄姬", "司马懿", "小乔", "周瑜", "武则天", "墨子", "沈梦溪", "不知火舞", "奕星", "陈咬金", "钟馗"]
+        # target_name_list = ["孙尚香","李元芳","狄仁杰","蒙犽","鲁班","百里守约","伽罗","公孙离","后裔","庄周","苏烈"]
+        # target_name_list = ["蔡文姬","大乔","孙膑","盾山","杨玉环","明世隐","姜子牙","太乙真人","牛魔","嫦娥","猪八戒"]
+        # target_name_list = []
+        r = []
+        for i in range(len(result)):
+            if result[i] in target_name_list:
+                r.append(1)
+            else:
+                r.append(0)
+        return r
+
+    def is_candidate(result):
+        # target_name_list = ["马超","张飞","诸葛亮","元歌","黄忠","赵云","刘禅","关羽","刘备"]
+        # target_name_list = ["元歌","裴擒虎","百里玄策","橘右京","孙悟空","李白","马超","娜可露露","上官婉儿","貂蝉"]
+        # target_name_list = ["曹操","典韦","老夫子","钟无艳","花木兰","李信","凯","宫本武藏","吕布","夏侯惇","孙策"]
+        target_name_list = ["甄姬","司马懿","小乔","周瑜","武则天","墨子","沈梦溪","不知火舞","奕星","陈咬金","钟馗"]
+        # target_name_list = ["孙尚香","李元芳","狄仁杰","蒙犽","鲁班","百里守约","伽罗","公孙离","后裔","庄周","苏烈"]
+        # target_name_list = ["蔡文姬","大乔","孙膑","盾山","杨玉环","明世隐","姜子牙","太乙真人","牛魔","嫦娥","猪八戒"]
+
+        r = []
+        for i in range(len(result)):
+            if result[i] in target_name_list:
+                r.append(1)
+            else:
+                r.append(0)
+        return r
         
     def action():
         global lock2,g_result
@@ -497,13 +559,15 @@ def action_init():
         while True:
             #print("hi from action")
             button = [0,0,0,0,0]
+            button1 = [0,0,0,0,0,0,0,0]
             button2 = [0]
             lock2.acquire()
             if g_result['period'] in ['选子']:
-                for i in range(5):
-                    if is_target(g_result['class'][i]):
-                        button[i] = 1
-                
+                button = is_target(g_result['class'])
+
+                # button1 = is_candidate(g_result['candidate'])
+                # button1_location = [xx,xx]*button1.count(1)
+
                 button2[0] = 1
                 if int(g_result['money']) > 5:
                     button2_location = (1540,340)
@@ -543,7 +607,15 @@ def action_init():
                     pyautogui.moveTo((button_location[i][0]+SYS_W,button_location[i][1]+SYS_H))
                     time.sleep(0.3)
                     pyautogui.click()
-            
+
+            # for i in range(8):
+            #     if button1[i] == 1:
+            #         pyautogui.moveTo((button1_location[i][0] + SYS_W, button1_location[i][1] + SYS_H))
+            #         time.sleep(0.3)
+            #         pyautogui.click()
+            #         pyautogui.moveTo(( xx+ SYS_W,  xx+ SYS_H))#出售位置
+            #         pyautogui.click()
+
             if button2[0] == 1:
                 pyautogui.moveTo((button2_location[0]+SYS_W,button2_location[1]+SYS_H))
                 time.sleep(0.3)
@@ -567,7 +639,7 @@ def detect_init():
             lock.release()
             
             result = s.get_status(array)
-            
+
             lock2.acquire()
             gshow = array.copy()
             g_result = result.copy()
