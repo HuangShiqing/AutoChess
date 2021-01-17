@@ -66,7 +66,7 @@ class status:
         self.money = 0
         self.result = []
         self.confidence = []
-        self.result_candidate = []
+        self.result_candidate = ["","","","","","","",""]
         self.confidence_candidate = []
         self.reader_en = easyocr.Reader(['en'])
         self.reader_ch = easyocr.Reader(['ch_sim'])
@@ -89,7 +89,7 @@ class status:
                                  "梦魇之牙","魔女斗篷","闪电匕首","贤者之书","辅助令旗","末世","战士令旗",
                                  "反伤甲","冰霜长矛","法师令旗","炽热支配者","暴烈之甲","魏国令","长安令",
                                  "噬神之书","博学者之怒","射手令旗","破军"]
-        self.net3 = torch.load("./trained_model_candidate/1/model_latest.pkl").eval()
+        self.net3 = torch.load("./trained_model_candidate/2/model_latest.pkl").eval()
     
     def get_status(self, img_np):
         global count, count2,count3, log_time
@@ -123,7 +123,7 @@ class status:
             #记录置信度低的图像
             count += 1
             if count % 5 == 0:
-                dir = "./log/"+log_time+"/hero/"
+                dir = "../log/"+log_time+"/hero/"
                 for i in range(5):
                     if self.confidence[i] < 0.8:
                         tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
@@ -153,7 +153,7 @@ class status:
             #记录candidate置信度低的图像
             count3 += 1
             if count3 % 5 == 0:
-                dir = "./log/"+log_time+"/candidate/"
+                dir = "../log/"+log_time+"/candidate/"
                 for i in range(8):
                     if self.confidence_candidate[i] < 0.8:
                         tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
@@ -171,7 +171,12 @@ class status:
                 self.money = result3[0][1]
                 if self.money == 'o' or self.money == '':
                     self.money = '0'
-            return {"period":self.period,"money":self.money,"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
+                money = ""
+                for it in self.money:
+                    if it in ['0','1','2','3','4','5','6','7','8','9']:
+                        money += it
+                self.money = money
+            return {"period":self.period,"money":int(self.money),"class":self.result,"confidence":self.confidence,"class_candidate":self.result_candidate,"confidence_candidate":self.confidence_candidate}
         
         #选装备
         img4_np = img_np[30:70,700:810,:]#h,w  剩余时间
@@ -205,7 +210,7 @@ class status:
             #记录置信度低的图像
             count2 += 1
             if count2 % 5 == 0:
-                dir = "./log/"+log_time+"/weapon/"
+                dir = "../log/"+log_time+"/weapon/"
                 for i in range(5):
                     if self.confidence[i] < 0.8:
                         tmp1 = Image.fromarray(img_np[rect_top:rect_bottom,rect_left[i]:rect_right[i],:])
@@ -521,27 +526,56 @@ def gst_init():
     return pipeline, pipeline2
 
 def action_init():
+    cost = {"猪八戒":3,"牛魔":3,"裴擒虎":2,"鲁班":1,"上官婉儿":2,"甄姬":3,"孙策":5,"陈咬金":3,"武则天":5,
+            "庄周":3,"蔡文姬":2,"马超":5,"嫦娥":1,"橘右京":3,"孙悟空":3,"凯":4,"张飞":2,"诸葛亮":3,"空":0,
+            "孙尚香":4,"蒙犽":5,"元歌":1,"黄忠":4,"奕星":4,"夏侯惇":2,"狄仁杰":2,"明世隐":1,"曹操":3,
+            "宫本武藏":4,"钟无艳":2,"李白":4,"司马懿":4,"太乙真人":3,"吕布":5,"姜子牙":2,"盾山":1,
+            "百里守约":1,"赵云":2,"苏烈":4,"孙膑":5,"百里玄策":2,"钟馗":2,"不知火舞":2,
+            "娜可露露":1,"大乔":3,"周瑜":2,"花木兰":3,"貂蝉":4,"典韦":1,"刘禅":1,"小乔":1,"李元芳":1,
+            "关羽":3,"李信":2,"伽罗":3,"公孙离":3,"墨子":3,"沈梦溪":1,"后裔":4,"杨玉环":5,"刘备":1,"老夫子":1}
+    def bug_strategy(result, gold, max_num):
+        num = 0
+        button = [0,0,0,0,0]#0:不买(购买数量原因或者金币原因) 1:买 2:空
+        for i in range(5):
+            if max_num == 0:
+                break
+
+            g = cost[result[i]]
+            if g == 0:
+                button[i] = 2
+            elif g > gold:
+                button[i] = 0
+            else:
+                num += 1
+                gold -= g
+                button[i] = 1
+                max_num -= 1
+
+        return num, gold, button
+
+    
     def is_target(result):
-        target_name_list = ["马超","张飞","诸葛亮","元歌","黄忠","赵云","刘禅","关羽","刘备"]
+        # target_name_list = ["马超","张飞","诸葛亮","元歌","黄忠","赵云","刘禅","关羽","刘备"]
         # target_name_list = ["元歌","裴擒虎","百里玄策","橘右京","孙悟空","李白","马超","娜可露露","上官婉儿","貂蝉"]
         # target_name_list = ["曹操","典韦","老夫子","钟无艳","花木兰","李信","凯","宫本武藏","吕布","夏侯惇","孙策"]
         # target_name_list = ["甄姬", "司马懿", "小乔", "周瑜", "武则天", "墨子", "沈梦溪", "不知火舞", "奕星", "陈咬金", "钟馗"]
         # target_name_list = ["孙尚香","李元芳","狄仁杰","蒙犽","鲁班","百里守约","伽罗","公孙离","后裔","庄周","苏烈"]
         # target_name_list = ["蔡文姬","大乔","孙膑","盾山","杨玉环","明世隐","姜子牙","太乙真人","牛魔","嫦娥","猪八戒"]
         # target_name_list = []
+        not_target_name_list = ["空"]
         r = []
         for i in range(len(result)):
-            if result[i] in target_name_list:
+            if result[i] not in not_target_name_list:
                 r.append(1)
             else:
                 r.append(0)
         return r
 
     def is_candidate(result):
-        # target_name_list = ["马超","张飞","诸葛亮","元歌","黄忠","赵云","刘禅","关羽","刘备"]
+        target_name_list = ["马超","张飞","诸葛亮","元歌","黄忠","赵云","刘禅","关羽","刘备"]
         # target_name_list = ["元歌","裴擒虎","百里玄策","橘右京","孙悟空","李白","马超","娜可露露","上官婉儿","貂蝉"]
         # target_name_list = ["曹操","典韦","老夫子","钟无艳","花木兰","李信","凯","宫本武藏","吕布","夏侯惇","孙策"]
-        target_name_list = ["甄姬","司马懿","小乔","周瑜","武则天","墨子","沈梦溪","不知火舞","奕星","陈咬金","钟馗"]
+        # target_name_list = ["甄姬","司马懿","小乔","周瑜","武则天","墨子","沈梦溪","不知火舞","奕星","陈咬金","钟馗"]
         # target_name_list = ["孙尚香","李元芳","狄仁杰","蒙犽","鲁班","百里守约","伽罗","公孙离","后裔","庄周","苏烈"]
         # target_name_list = ["蔡文姬","大乔","孙膑","盾山","杨玉环","明世隐","姜子牙","太乙真人","牛魔","嫦娥","猪八戒"]
 
@@ -549,6 +583,8 @@ def action_init():
         for i in range(len(result)):
             if result[i] in target_name_list:
                 r.append(1)
+            elif result[i] in ["空"]:
+                r.append(2)
             else:
                 r.append(0)
         return r
@@ -556,26 +592,52 @@ def action_init():
     def action():
         global lock2,g_result
         button_location = [[(rect1_left+rect1_right)/2,(rect_top+rect_bottom)/2],[(rect2_left+rect2_right)/2,(rect_top+rect_bottom)/2],[(rect3_left+rect3_right)/2,(rect_top+rect_bottom)/2],[(rect4_left+rect4_right)/2,(rect_top+rect_bottom)/2],[(rect5_left+rect5_right)/2,(rect_top+rect_bottom)/2],]#w,h
+        button1_location = [(412,732),(537,732),(662,732),(787,732),(912,732),(1037,732),(1162,732),(1287,732)]
+        flag = False
         while True:
+            time.sleep(0.5)
             #print("hi from action")
             button = [0,0,0,0,0]
-            button1 = [0,0,0,0,0,0,0,0]
+            button1 = [1,1,1,1,1,1,1,1]
             button2 = [0]
+            button3 = [0]
+            button4 = [0]
             lock2.acquire()
+
             if g_result['period'] in ['选子']:
-                button = is_target(g_result['class'])
+                # 卖棋子
+                button1 = is_candidate(g_result['class_candidate'])
+                confidence_candidate = g_result['confidence_candidate']
+                can_buy_num = button1.count(2)
 
-                # button1 = is_candidate(g_result['candidate'])
-                # button1_location = [xx,xx]*button1.count(1)
+                button3[0] = 1
+                button3_location = (1500, 730)#打开购买区
 
-                button2[0] = 1
-                if int(g_result['money']) > 5:
-                    button2_location = (1540,340)
+                #买棋子 0:不买(购买数量原因或者金币原因) 1:买 2:空
+                have_num, gold, button = bug_strategy(g_result['class'], int(g_result["money"]), can_buy_num)
+
+                if button.count(0) > 0 and button.count(1) == 0:#有可以买的却一个都买不了
+                    button2[0] = 1
+                    button2_location = (230, 355)  # 锁棋子
+                    button4[0] = 1
+                    button4_location = (1500, 730)#关闭购买区
+                elif button.count(0) == 0 and gold > 2:#都是可以买的或者是空,即买完后购买区全是空
+                    button2[0] = 1
+                    button2_location = (1540, 340)  # 刷新
+                    button4[0] = 0
+
+                if flag == False:
+                    print("buy")
+                    print("购买区: ", g_result['class'])
+                    print("money: ", g_result["money"], gold)
                 else:
-                    button2_location = (1500,730)
+                    print("sell")
+                    print("候选区: ",g_result['class_candidate'])
+
             elif g_result['period'] in ['选装备']:
                 button[0] = 1
                 button[1] = 1
+                flag = False
 
                 button2[0] = 1
                 button2_location = (1500, 730)
@@ -602,26 +664,43 @@ def action_init():
                 button2[0] = 1
             lock2.release()
 
-            for i in range(5):
-                if button[i] == 1:
-                    pyautogui.moveTo((button_location[i][0]+SYS_W,button_location[i][1]+SYS_H))
+            if flag == False:#买棋子
+                flag = True
+                for i in range(5):
+                    if button[i] == 1:
+                        pyautogui.moveTo((button_location[i][0] + SYS_W, button_location[i][1] + SYS_H))
+                        time.sleep(0.3)
+                        pyautogui.click()
+
+                if button2[0] == 1:
+                    pyautogui.moveTo((button2_location[0]+SYS_W,button2_location[1]+SYS_H))
                     time.sleep(0.3)
                     pyautogui.click()
 
-            # for i in range(8):
-            #     if button1[i] == 1:
-            #         pyautogui.moveTo((button1_location[i][0] + SYS_W, button1_location[i][1] + SYS_H))
-            #         time.sleep(0.3)
-            #         pyautogui.click()
-            #         pyautogui.moveTo(( xx+ SYS_W,  xx+ SYS_H))#出售位置
-            #         pyautogui.click()
+                if button4[0] == 1:
+                    pyautogui.moveTo((button4_location[0]+SYS_W,button4_location[1]+SYS_H))
+                    time.sleep(0.3)
+                    pyautogui.click()
 
-            if button2[0] == 1:
-                pyautogui.moveTo((button2_location[0]+SYS_W,button2_location[1]+SYS_H))
-                time.sleep(0.3)
-                pyautogui.click()
+            else:#卖棋子
+                flag = False
+                have_sell = False
+                for i in range(8):
+                    if button1[i] == 0 and confidence_candidate[i] > 0.8:
+                        have_sell = True
+                        pyautogui.moveTo((button1_location[i][0] + SYS_W, button1_location[i][1] +30+ SYS_H))
+                        time.sleep(0.3)
+                        pyautogui.click()
+                        pyautogui.moveTo((225+SYS_W,  585+30+SYS_H))#出售位置
+                        time.sleep(0.3)
+                        pyautogui.click()
+
+                if button3[0] == 1 and have_sell == True:
+                    pyautogui.moveTo((button3_location[0]+SYS_W,button3_location[1]+SYS_H))
+                    time.sleep(0.3)
+                    pyautogui.click()
             
-            time.sleep(1)
+            time.sleep(0.5)
             
             
     t = Thread(target=action, name='action')
